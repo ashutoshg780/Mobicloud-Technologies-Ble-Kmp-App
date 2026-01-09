@@ -36,7 +36,6 @@ struct ScanView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        // Scan Button
                         ScanButton(isScanning: viewModel.isScanning) {
                             if viewModel.isScanning {
                                 viewModel.stopScan()
@@ -47,11 +46,9 @@ struct ScanView: View {
                         .padding(.horizontal)
                         .padding(.top, 8)
 
-                        // Stats Card
                         DeviceStatsCard(deviceCount: viewModel.scannedDevices.count)
                             .padding(.horizontal)
 
-                        // Device List
                         if viewModel.scannedDevices.isEmpty {
                             EmptyDeviceList(isScanning: viewModel.isScanning)
                                 .padding(.top, 32)
@@ -192,7 +189,6 @@ struct ModernDeviceCard: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // Device Icon
             ZStack {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
@@ -209,7 +205,6 @@ struct ModernDeviceCard: View {
                     .foregroundColor(Color(hex: "6366F1"))
             }
 
-            // Device Info
             VStack(alignment: .leading, spacing: 4) {
                 Text(device.name ?? "Unknown Device")
                     .font(.system(size: 17, weight: .semibold))
@@ -236,7 +231,6 @@ struct ModernDeviceCard: View {
 
             Spacer()
 
-            // Connect Button
             Button(action: onConnect) {
                 HStack(spacing: 6) {
                     Image(systemName: "link")
@@ -270,12 +264,10 @@ struct DeviceInfoView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        // Connection Status Card
                         ConnectionStatusCard(connectionState: viewModel.connectionState)
                             .padding(.horizontal)
                             .padding(.top, 8)
 
-                        // Device Info Card
                         if let deviceInfo = viewModel.deviceInfo {
                             DeviceInformationCard(deviceInfo: deviceInfo)
                                 .padding(.horizontal)
@@ -286,7 +278,6 @@ struct DeviceInfoView: View {
                     .padding(.vertical)
                 }
 
-                // Disconnect Button (Floating)
                 if case .connected = viewModel.connectionState {
                     VStack {
                         Spacer()
@@ -396,7 +387,6 @@ struct DeviceInformationCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             HStack(spacing: 12) {
                 Image(systemName: "info.circle")
                     .font(.system(size: 20, weight: .semibold))
@@ -409,26 +399,31 @@ struct DeviceInformationCard: View {
             .padding(20)
 
             VStack(spacing: 16) {
-                // Device Name
                 ModernInfoRow(
                     icon: "device.laptop",
                     label: "Device Name",
                     value: deviceInfo.device.name ?? "Unknown"
                 )
 
-                // Device ID
                 ModernInfoRow(
                     icon: "number",
                     label: "Device ID",
                     value: deviceInfo.device.id
                 )
 
-                // Battery Level
                 if let battery = deviceInfo.batteryLevel {
                     Divider()
                         .padding(.vertical, 4)
 
                     BatteryLevelView(batteryLevel: battery)
+                }
+
+                // ⭐ HEART RATE SECTION - NEW!
+                if let heartRate = deviceInfo.heartRate {
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    HeartRateView(heartRate: heartRate)
                 }
             }
             .padding(.horizontal, 20)
@@ -535,6 +530,114 @@ struct BatteryLevelView: View {
     }
 }
 
+// ⭐ MARK: - Heart Rate View - NEW!
+struct HeartRateView: View {
+    let heartRate: HeartRate
+
+    var heartRateColor: Color {
+        if heartRate.beatsPerMinute < 60 {
+            return Color(hex: "3B82F6")
+        } else if heartRate.beatsPerMinute <= 100 {
+            return Color(hex: "10B981")
+        } else {
+            return Color(hex: "EF4444")
+        }
+    }
+
+    var heartRateStatus: String {
+        if heartRate.beatsPerMinute < 60 {
+            return "Low"
+        } else if heartRate.beatsPerMinute <= 100 {
+            return "Normal"
+        } else {
+            return "High"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(Color(hex: "EF4444"))
+                Text("Heart Rate")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(Color(hex: "1E293B"))
+            }
+
+            HStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(heartRate.beatsPerMinute)")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundColor(Color(hex: "EF4444"))
+                    Text("BPM")
+                        .font(.system(size: 15))
+                        .foregroundColor(Color(hex: "64748B"))
+                }
+
+                Spacer()
+
+                HeartBeatAnimationView()
+            }
+            .padding(20)
+            .background(Color(hex: "EF4444").opacity(0.1))
+            .cornerRadius(16)
+
+            HStack {
+                HStack(spacing: 4) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(hex: "64748B"))
+                    Text("Status")
+                        .font(.system(size: 13))
+                        .foregroundColor(Color(hex: "64748B"))
+                }
+
+                Spacer()
+
+                Text(heartRateStatus)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(heartRateColor)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(heartRateColor.opacity(0.15))
+                    .cornerRadius(8)
+            }
+
+            if let contact = heartRate.sensorContact {
+                HStack(spacing: 6) {
+                    Image(systemName: contact ? "checkmark.circle" : "exclamationmark.triangle")
+                        .font(.system(size: 12))
+                        .foregroundColor(contact ? Color(hex: "10B981") : Color(hex: "F59E0B"))
+                    Text(contact ? "Sensor Contact: Good" : "Sensor Contact: Poor")
+                        .font(.system(size: 13))
+                        .foregroundColor(Color(hex: "64748B"))
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Heart Beat Animation
+struct HeartBeatAnimationView: View {
+    @State private var isAnimating = false
+
+    var body: some View {
+        Image(systemName: "heart.fill")
+            .font(.system(size: 40))
+            .foregroundColor(Color(hex: "EF4444"))
+            .scaleEffect(isAnimating ? 1.3 : 1.0)
+            .animation(
+                Animation.easeInOut(duration: 0.4)
+                    .repeatForever(autoreverses: true),
+                value: isAnimating
+            )
+            .onAppear {
+                isAnimating = true
+            }
+    }
+}
+
 // MARK: - Disconnect Button
 struct DisconnectButton: View {
     let action: () -> Void
@@ -579,7 +682,6 @@ class BleViewModel: ObservableObject {
     }
 
     private func observeStates() {
-        // Observe scanned devices
         stateObservers.append(
             bleManager.scannedDevices.watch { [weak self] devices in
                 DispatchQueue.main.async {
@@ -588,7 +690,6 @@ class BleViewModel: ObservableObject {
             }
         )
 
-        // Observe connection state
         stateObservers.append(
             bleManager.connectionState.watch { [weak self] state in
                 DispatchQueue.main.async {
@@ -597,7 +698,6 @@ class BleViewModel: ObservableObject {
             }
         )
 
-        // Observe device info
         stateObservers.append(
             bleManager.deviceInfo.watch { [weak self] info in
                 DispatchQueue.main.async {
@@ -636,11 +736,11 @@ extension Color {
         Scanner(string: hex).scanHexInt64(&int)
         let a, r, g, b: UInt64
         switch hex.count {
-        case 3: // RGB (12-bit)
+        case 3:
             (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: // RGB (24-bit)
+        case 6:
             (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: // ARGB (32-bit)
+        case 8:
             (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
         default:
             (a, r, g, b) = (1, 1, 1, 0)

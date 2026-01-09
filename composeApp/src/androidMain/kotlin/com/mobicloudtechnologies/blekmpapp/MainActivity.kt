@@ -95,10 +95,10 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun BleAppTheme(content: @Composable () -> Unit) {
     val colorScheme = lightColorScheme(
-        primary = Color(0xFF6366F1),        // Indigo
-        secondary = Color(0xFF8B5CF6),      // Purple
-        tertiary = Color(0xFFEC4899),       // Pink
-        background = Color(0xFFF8FAFC),     // Light gray-blue
+        primary = Color(0xFF6366F1),
+        secondary = Color(0xFF8B5CF6),
+        tertiary = Color(0xFFEC4899),
+        background = Color(0xFFF8FAFC),
         surface = Color.White,
         error = Color(0xFFEF4444),
         onPrimary = Color.White,
@@ -278,7 +278,6 @@ fun ScanScreen(repository: BleRepository, devices: List<BleDevice>) {
             .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
-        // Scan Button with Gradient
         Button(
             onClick = {
                 if (isScanning) {
@@ -316,7 +315,6 @@ fun ScanScreen(repository: BleRepository, devices: List<BleDevice>) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Stats Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
@@ -372,7 +370,6 @@ fun ScanScreen(repository: BleRepository, devices: List<BleDevice>) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Device List
         if (devices.isEmpty()) {
             EmptyDeviceList(isScanning)
         } else {
@@ -459,7 +456,6 @@ fun ModernDeviceCard(device: BleDevice, onConnect: () -> Unit) {
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Device Icon
                 Box(
                     modifier = Modifier
                         .size(56.dp)
@@ -484,7 +480,6 @@ fun ModernDeviceCard(device: BleDevice, onConnect: () -> Unit) {
 
                 Spacer(modifier = Modifier.width(16.dp))
 
-                // Device Info
                 Column {
                     Text(
                         text = device.name ?: "Unknown Device",
@@ -529,7 +524,6 @@ fun ModernDeviceCard(device: BleDevice, onConnect: () -> Unit) {
                 }
             }
 
-            // Connect Button
             Button(
                 onClick = onConnect,
                 colors = ButtonDefaults.buttonColors(
@@ -562,7 +556,6 @@ fun DeviceInfoScreen(
             .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
-        // Connection Status Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
@@ -595,7 +588,6 @@ fun DeviceInfoScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Device Info Card
         deviceInfo?.let { info ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -642,79 +634,16 @@ fun DeviceInfoScreen(
                         Divider(color = MaterialTheme.colorScheme.surfaceVariant)
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Filled.BatteryChargingFull,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.tertiary
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Battery Level",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
+                        BatterySection(battery)
+                    }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                    // ⭐ HEART RATE SECTION - NEW!
+                    info.heartRate?.let { heartRate ->
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+                        Spacer(modifier = Modifier.height(20.dp))
 
-                        // Battery Progress Bar
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    "${battery.percentage}%",
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = when {
-                                        battery.percentage >= 60 -> Color(0xFF10B981).copy(alpha = 0.2f)
-                                        battery.percentage >= 30 -> Color(0xFFF59E0B).copy(alpha = 0.2f)
-                                        else -> Color(0xFFEF4444).copy(alpha = 0.2f)
-                                    }
-                                ) {
-                                    Text(
-                                        when {
-                                            battery.percentage >= 60 -> "Good"
-                                            battery.percentage >= 30 -> "Medium"
-                                            else -> "Low"
-                                        },
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        color = when {
-                                            battery.percentage >= 60 -> Color(0xFF10B981)
-                                            battery.percentage >= 30 -> Color(0xFFF59E0B)
-                                            else -> Color(0xFFEF4444)
-                                        }
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            LinearProgressIndicator(
-                                progress = { battery.percentage / 100f },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(12.dp)
-                                    .clip(RoundedCornerShape(6.dp)),
-                                color = when {
-                                    battery.percentage >= 60 -> Color(0xFF10B981)
-                                    battery.percentage >= 30 -> Color(0xFFF59E0B)
-                                    else -> Color(0xFFEF4444)
-                                },
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                            )
-                        }
+                        HeartRateSection(heartRate)
                     }
                 }
             }
@@ -722,7 +651,6 @@ fun DeviceInfoScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Disconnect Button
         if (connectionState is ConnectionState.Connected) {
             Button(
                 onClick = { repository.disconnectDevice() },
@@ -752,8 +680,6 @@ fun DeviceInfoScreen(
         }
     }
 }
-
-
 
 @Composable
 fun ConnectionStatusCard(connectionState: ConnectionState) {
@@ -818,6 +744,223 @@ fun ConnectionStatusCard(connectionState: ConnectionState) {
             }
         }
     }
+}
+
+@Composable
+fun BatterySection(battery: BatteryLevel) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Filled.BatteryChargingFull,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.tertiary
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Battery Level",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "${battery.percentage}%",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = when {
+                    battery.percentage >= 60 -> Color(0xFF10B981).copy(alpha = 0.2f)
+                    battery.percentage >= 30 -> Color(0xFFF59E0B).copy(alpha = 0.2f)
+                    else -> Color(0xFFEF4444).copy(alpha = 0.2f)
+                }
+            ) {
+                Text(
+                    when {
+                        battery.percentage >= 60 -> "Good"
+                        battery.percentage >= 30 -> "Medium"
+                        else -> "Low"
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = when {
+                        battery.percentage >= 60 -> Color(0xFF10B981)
+                        battery.percentage >= 30 -> Color(0xFFF59E0B)
+                        else -> Color(0xFFEF4444)
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LinearProgressIndicator(
+            progress = { battery.percentage / 100f },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(12.dp)
+                .clip(RoundedCornerShape(6.dp)),
+            color = when {
+                battery.percentage >= 60 -> Color(0xFF10B981)
+                battery.percentage >= 30 -> Color(0xFFF59E0B)
+                else -> Color(0xFFEF4444)
+            },
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
+    }
+}
+
+// ⭐ HEART RATE SECTION - NEW!
+@Composable
+fun HeartRateSection(heartRate: HeartRate) {
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Filled.Favorite,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = Color(0xFFEF4444)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Heart Rate",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0xFFEF4444).copy(alpha = 0.1f)
+        ) {
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        "${heartRate.beatsPerMinute}",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFEF4444)
+                    )
+                    Text(
+                        "BPM",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                HeartBeatAnimation()
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    "Status",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = when {
+                    heartRate.beatsPerMinute < 60 -> Color(0xFF3B82F6).copy(alpha = 0.2f)
+                    heartRate.beatsPerMinute <= 100 -> Color(0xFF10B981).copy(alpha = 0.2f)
+                    else -> Color(0xFFEF4444).copy(alpha = 0.2f)
+                }
+            ) {
+                Text(
+                    when {
+                        heartRate.beatsPerMinute < 60 -> "Low"
+                        heartRate.beatsPerMinute <= 100 -> "Normal"
+                        else -> "High"
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = when {
+                        heartRate.beatsPerMinute < 60 -> Color(0xFF3B82F6)
+                        heartRate.beatsPerMinute <= 100 -> Color(0xFF10B981)
+                        else -> Color(0xFFEF4444)
+                    }
+                )
+            }
+        }
+
+        heartRate.sensorContact?.let { contact ->
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (contact) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = if (contact) Color(0xFF10B981) else Color(0xFFF59E0B)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    if (contact) "Sensor Contact: Good" else "Sensor Contact: Poor",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HeartBeatAnimation() {
+    val infiniteTransition = rememberInfiniteTransition(label = "heartbeat")
+
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "heartbeat_scale"
+    )
+
+    Icon(
+        Icons.Filled.Favorite,
+        contentDescription = null,
+        modifier = Modifier
+            .size(48.dp)
+            .scale(scale),
+        tint = Color(0xFFEF4444)
+    )
 }
 
 @Composable
