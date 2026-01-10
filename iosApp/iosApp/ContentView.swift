@@ -665,9 +665,9 @@ struct DisconnectButton: View {
     }
 }
 
-// MARK: - BLE ViewModel with Working StateFlow Observation
+// MARK: - BLE ViewModel - USES INTERFACE NOT CONCRETE CLASS
 class BleViewModel: ObservableObject {
-    private let bleManager: IosBleManager
+    private let bleManager: BleManager
 
     @Published var scannedDevices: [BleDevice] = []
     @Published var connectionState: ConnectionState = ConnectionState.Disconnected()
@@ -675,7 +675,8 @@ class BleViewModel: ObservableObject {
     @Published var isScanning: Bool = false
 
     init() {
-        self.bleManager = IosBleManager()
+        // Use createBleManager() function which returns BleManager interface
+        self.bleManager = createBleManager()
         setupObservers()
     }
 
