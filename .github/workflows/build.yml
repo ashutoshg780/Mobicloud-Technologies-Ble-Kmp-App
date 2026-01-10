@@ -67,10 +67,25 @@ jobs:
             -scheme iosApp \
             -sdk iphonesimulator \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=17.2' \
+            -destination 'generic/platform=iOS Simulator' \
             clean build \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO
+            CODE_SIGNING_REQUIRED=NO \
+            | tee xcodebuild.log
+
+      - name: Upload iOS Build Log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-build-log
+          path: iosApp/xcodebuild.log
+          retention-days: 7
 
       - name: Check Build Status
-        run: echo "✅ iOS Build Complete!"
+        run: |
+          if grep -q "BUILD SUCCEEDED" iosApp/xcodebuild.log; then
+            echo "✅ iOS Build Successful!"
+          else
+            echo "❌ iOS Build Failed"
+            exit 1
+          fi
