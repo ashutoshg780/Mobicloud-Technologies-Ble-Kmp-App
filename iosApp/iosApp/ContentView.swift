@@ -665,7 +665,7 @@ struct DisconnectButton: View {
     }
 }
 
-// MARK: - BLE ViewModel - USES INTERFACE NOT CONCRETE CLASS
+// MARK: - BLE ViewModel
 class BleViewModel: ObservableObject {
     private let bleManager: BleManager
 
@@ -675,18 +675,16 @@ class BleViewModel: ObservableObject {
     @Published var isScanning: Bool = false
 
     init() {
-        // Use createBleManager() function which returns BleManager interface
-        self.bleManager = createBleManager()
+        // Use the Shared module's createBleManager function
+        self.bleManager = SharedKt.createBleManager()
         setupObservers()
     }
 
     private func setupObservers() {
-        // Poll StateFlow values periodically
         Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             guard let self = self else { return }
 
             DispatchQueue.main.async {
-                // Get current StateFlow values
                 let devices = self.bleManager.scannedDevices.value as? [BleDevice] ?? []
                 self.scannedDevices = devices
 
@@ -711,7 +709,11 @@ class BleViewModel: ObservableObject {
 
     func connect(to device: BleDevice) {
         Task {
-            await bleManager.connect(device: device)
+            do {
+                try await bleManager.connect(device: device)
+            } catch {
+                print("Connection failed: \(error.localizedDescription)")
+            }
         }
     }
 
