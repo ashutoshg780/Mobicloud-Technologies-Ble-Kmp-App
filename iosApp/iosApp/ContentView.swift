@@ -278,7 +278,8 @@ struct DeviceInfoView: View {
                     .padding(.vertical)
                 }
 
-                if case .connected = viewModel.connectionState {
+                // ✅ FIX: Use is Connected.self check
+                if viewModel.connectionState is ConnectionState.Connected {
                     VStack {
                         Spacer()
                         DisconnectButton {
@@ -418,7 +419,6 @@ struct DeviceInformationCard: View {
                     BatteryLevelView(batteryLevel: battery)
                 }
 
-                // ⭐ HEART RATE SECTION - NEW!
                 if let heartRate = deviceInfo.heartRate {
                     Divider()
                         .padding(.vertical, 4)
@@ -530,7 +530,7 @@ struct BatteryLevelView: View {
     }
 }
 
-// ⭐ MARK: - Heart Rate View - NEW!
+// MARK: - Heart Rate View
 struct HeartRateView: View {
     let heartRate: HeartRate
 
@@ -604,7 +604,8 @@ struct HeartRateView: View {
                     .cornerRadius(8)
             }
 
-            if let contact = heartRate.sensorContact {
+            // ✅ FIX: Convert KotlinBoolean to Bool
+            if let contact = heartRate.sensorContact?.boolValue {
                 HStack(spacing: 6) {
                     Image(systemName: contact ? "checkmark.circle" : "exclamationmark.triangle")
                         .font(.system(size: 12))
@@ -677,29 +678,31 @@ class BleViewModel: ObservableObject {
     @Published var isScanning: Bool = false
 
     init() {
-        self.bleManager = PlatformKt.createBleManager()
+        // ✅ FIX: Import Shared module properly
+        self.bleManager = createBleManager()
         observeStates()
     }
 
     private func observeStates() {
+        // ✅ FIX: Use KMPObservableWrapper for StateFlow observation
         stateObservers.append(
-            bleManager.scannedDevices.watch { [weak self] devices in
+            KMPObservableWrapper(flow: bleManager.scannedDevices) { [weak self] devices in
                 DispatchQueue.main.async {
-                    self?.scannedDevices = devices as! [BleDevice]
+                    self?.scannedDevices = devices as? [BleDevice] ?? []
                 }
             }
         )
 
         stateObservers.append(
-            bleManager.connectionState.watch { [weak self] state in
+            KMPObservableWrapper(flow: bleManager.connectionState) { [weak self] state in
                 DispatchQueue.main.async {
-                    self?.connectionState = state as! ConnectionState
+                    self?.connectionState = state as? ConnectionState ?? ConnectionState.Disconnected()
                 }
             }
         )
 
         stateObservers.append(
-            bleManager.deviceInfo.watch { [weak self] info in
+            KMPObservableWrapper(flow: bleManager.deviceInfo) { [weak self] info in
                 DispatchQueue.main.async {
                     self?.deviceInfo = info as? DeviceInfo
                 }
@@ -719,12 +722,31 @@ class BleViewModel: ObservableObject {
 
     func connect(to device: BleDevice) {
         Task {
-            try await bleManager.connect(device: device)
+            do {
+                try await bleManager.connect(device: device)
+            } catch {
+                print("Connection error: \(error)")
+            }
         }
     }
 
     func disconnect() {
         bleManager.disconnect()
+    }
+}
+
+// ✅ MARK: - KMP StateFlow Observer Wrapper
+class KMPObservableWrapper {
+    private var cancellable: Any?
+
+    init<T: AnyObject>(flow: Kotlinx_coroutines_coreStateFlow, onChange: @escaping (T?) -> Void) {
+        cancellable = flow.watch { value in
+            onChange(value as? T)
+        }
+    }
+
+    deinit {
+        cancellable = nil
     }
 }
 
