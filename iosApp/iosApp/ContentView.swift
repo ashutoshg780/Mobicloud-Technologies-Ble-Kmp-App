@@ -665,10 +665,9 @@ struct DisconnectButton: View {
     }
 }
 
-// MARK: - BLE ViewModel
+// MARK: - BLE ViewModel with Working StateFlow Observation
 class BleViewModel: ObservableObject {
-    private let bleManager: BleManager
-    private var cancellables: Set<AnyCancellable> = []
+    private let bleManager: IosBleManager
 
     @Published var scannedDevices: [BleDevice] = []
     @Published var connectionState: ConnectionState = ConnectionState.Disconnected()
@@ -676,37 +675,25 @@ class BleViewModel: ObservableObject {
     @Published var isScanning: Bool = false
 
     init() {
-        self.bleManager = Platform().createBleManager()
-        observeStates()
+        self.bleManager = IosBleManager()
+        setupObservers()
     }
 
-    private func observeStates() {
-        // Observe scanned devices
-        Task {
-            for await devices in bleManager.scannedDevices {
-                await MainActor.run {
-                    self.scannedDevices = devices.compactMap { $0 as? BleDevice }
-                }
-            }
-        }
+    private func setupObservers() {
+        // Poll StateFlow values periodically
+        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
 
-        // Observe connection state
-        Task {
-            for await state in bleManager.connectionState {
-                await MainActor.run {
-                    if let connectionState = state as? ConnectionState {
-                        self.connectionState = connectionState
-                    }
-                }
-            }
-        }
+            DispatchQueue.main.async {
+                // Get current StateFlow values
+                let devices = self.bleManager.scannedDevices.value as? [BleDevice] ?? []
+                self.scannedDevices = devices
 
-        // Observe device info
-        Task {
-            for await info in bleManager.deviceInfo {
-                await MainActor.run {
-                    self.deviceInfo = info as? DeviceInfo
+                if let state = self.bleManager.connectionState.value as? ConnectionState {
+                    self.connectionState = state
                 }
+
+                self.deviceInfo = self.bleManager.deviceInfo.value as? DeviceInfo
             }
         }
     }
@@ -723,11 +710,7 @@ class BleViewModel: ObservableObject {
 
     func connect(to device: BleDevice) {
         Task {
-            do {
-                try await bleManager.connect(device: device)
-            } catch {
-                print("Connection error: \(error)")
-            }
+            await bleManager.connect(device: device)
         }
     }
 
@@ -735,9 +718,6 @@ class BleViewModel: ObservableObject {
         bleManager.disconnect()
     }
 }
-
-// MARK: - Combine Import
-import Combine
 
 // MARK: - Color Extension
 extension Color {
