@@ -164,6 +164,8 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
         didConnectPeripheral.discoverServices(null)
     }
 
+    // ⭐ FIX 2: Added @ObjCSignatureOverride annotation
+    @ObjCSignatureOverride
     override fun centralManager(
         central: CBCentralManager,
         didDisconnectPeripheral: CBPeripheral,
@@ -183,6 +185,8 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
         }
     }
 
+    // ⭐ FIX 2: Added @ObjCSignatureOverride annotation
+    @ObjCSignatureOverride
     override fun centralManager(
         central: CBCentralManager,
         didFailToConnectPeripheral: CBPeripheral,
@@ -205,6 +209,14 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
             // Discover characteristics for Battery Service
             if (cbService.UUID.UUIDString.equals(
                     BleConstants.BATTERY_SERVICE_UUID,
+                    ignoreCase = true
+                )) {
+                peripheral.discoverCharacteristics(null, cbService)
+            }
+
+            // Discover characteristics for Heart Rate Service
+            if (cbService.UUID.UUIDString.equals(
+                    BleConstants.HEART_RATE_SERVICE_UUID,
                     ignoreCase = true
                 )) {
                 peripheral.discoverCharacteristics(null, cbService)
@@ -232,6 +244,19 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
                     peripheral.setNotifyValue(true, cbChar)
                 }
             }
+
+            // Read heart rate
+            if (cbChar.UUID.UUIDString.equals(
+                    BleConstants.HEART_RATE_MEASUREMENT_UUID,
+                    ignoreCase = true
+                )) {
+                peripheral.readValueForCharacteristic(cbChar)
+
+                // Enable notifications
+                if (cbChar.properties and CBCharacteristicPropertyNotify.toULong() != 0uL) {
+                    peripheral.setNotifyValue(true, cbChar)
+                }
+            }
         }
     }
 
@@ -247,7 +272,10 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
                 val data = didUpdateValueForCharacteristic.value
                 data?.let { nsData ->
                     val bytes = ByteArray(nsData.length.toInt())
-                    nsData.getBytes(bytes.refTo(0), nsData.length)
+                    // ⭐ FIX 3: Changed from bytes.refTo(0) to bytes.usePinned { it.addressOf(0) }
+                    memScoped {
+                        nsData.getBytes(bytes.usePinned { it.addressOf(0) }, nsData.length)
+                    }
 
                     val batteryLevel = BleUtils.parseBatteryLevel(bytes)
                     batteryLevel?.let { level ->
@@ -257,6 +285,29 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
                             ) ?: DeviceInfo(
                                 device = device,
                                 batteryLevel = BatteryLevel(level)
+                            )
+                        }
+                    }
+                }
+            }
+
+            BleConstants.HEART_RATE_MEASUREMENT_UUID.lowercase() -> {
+                val data = didUpdateValueForCharacteristic.value
+                data?.let { nsData ->
+                    val bytes = ByteArray(nsData.length.toInt())
+                    // ⭐ FIX 3: Changed from bytes.refTo(0) to bytes.usePinned { it.addressOf(0) }
+                    memScoped {
+                        nsData.getBytes(bytes.usePinned { it.addressOf(0) }, nsData.length)
+                    }
+
+                    val heartRate = BleUtils.parseHeartRate(bytes)
+                    heartRate?.let { bpm ->
+                        currentDevice?.let { device ->
+                            _deviceInfo.value = _deviceInfo.value?.copy(
+                                heartRate = HeartRate(bpm)
+                            ) ?: DeviceInfo(
+                                device = device,
+                                heartRate = HeartRate(bpm)
                             )
                         }
                     }
