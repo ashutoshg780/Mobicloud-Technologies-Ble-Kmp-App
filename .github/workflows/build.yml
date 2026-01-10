@@ -70,22 +70,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             clean build \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            | tee xcodebuild.log
+            CODE_SIGNING_REQUIRED=NO
 
-      - name: Upload iOS Build Log
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ios-build-log
-          path: iosApp/xcodebuild.log
-          retention-days: 7
-
-      - name: Check Build Status
-        run: |
-          if grep -q "BUILD SUCCEEDED" iosApp/xcodebuild.log; then
-            echo "✅ iOS Build Successful!"
-          else
-            echo "❌ iOS Build Failed"
-            exit 1
-          fi
+      - name: Success Message
+        run: echo "✅ iOS Build Completed Successfully!"
