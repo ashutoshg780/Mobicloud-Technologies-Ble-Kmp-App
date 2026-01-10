@@ -12,7 +12,7 @@ import platform.darwin.NSObject
 import kotlinx.cinterop.*
 
 @OptIn(ExperimentalForeignApi::class)
-class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, CBPeripheralDelegateProtocol {
+class IosBleManager : NSObject(), CBCentralManagerDelegateProtocol, CBPeripheralDelegateProtocol {
 
     private var centralManager: CBCentralManager? = null
     private var connectedPeripheral: CBPeripheral? = null
@@ -20,13 +20,13 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     private val _scannedDevices = MutableStateFlow<List<BleDevice>>(emptyList())
-    override val scannedDevices: StateFlow<List<BleDevice>> = _scannedDevices.asStateFlow()
+    val scannedDevices: StateFlow<List<BleDevice>> = _scannedDevices.asStateFlow()
 
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
-    override val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
     private val _deviceInfo = MutableStateFlow<DeviceInfo?>(null)
-    override val deviceInfo: StateFlow<DeviceInfo?> = _deviceInfo.asStateFlow()
+    val deviceInfo: StateFlow<DeviceInfo?> = _deviceInfo.asStateFlow()
 
     private var currentDevice: BleDevice? = null
     private var isScanning = false
@@ -37,7 +37,7 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
 
     // MARK: - BleManager Implementation
 
-    override fun startScan() {
+    fun startScan() {
         if (centralManager?.state != CBManagerStatePoweredOn) {
             _connectionState.value = ConnectionState.Error("Bluetooth is not powered on")
             return
@@ -61,13 +61,13 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
         }
     }
 
-    override fun stopScan() {
+    fun stopScan() {
         if (!isScanning) return
         centralManager?.stopScan()
         isScanning = false
     }
 
-    override suspend fun connect(device: BleDevice) {
+    suspend fun connect(device: BleDevice) {
         disconnect()
 
         currentDevice = device
@@ -89,7 +89,7 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
         }
     }
 
-    override fun disconnect() {
+    fun disconnect() {
         connectedPeripheral?.let {
             centralManager?.cancelPeripheralConnection(it)
         }
@@ -99,11 +99,11 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
         _deviceInfo.value = null
     }
 
-    override fun isBluetoothEnabled(): Boolean {
+    fun isBluetoothEnabled(): Boolean {
         return centralManager?.state == CBManagerStatePoweredOn
     }
 
-    override fun requestEnableBluetooth() {
+    fun requestEnableBluetooth() {
         // iOS handles this automatically with system prompts
     }
 
@@ -164,7 +164,6 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
         didConnectPeripheral.discoverServices(null)
     }
 
-    // ⭐ FIX 2: Added @ObjCSignatureOverride annotation
     @ObjCSignatureOverride
     override fun centralManager(
         central: CBCentralManager,
@@ -185,7 +184,6 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
         }
     }
 
-    // ⭐ FIX 2: Added @ObjCSignatureOverride annotation
     @ObjCSignatureOverride
     override fun centralManager(
         central: CBCentralManager,
@@ -272,7 +270,6 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
                 val data = didUpdateValueForCharacteristic.value
                 data?.let { nsData ->
                     val bytes = ByteArray(nsData.length.toInt())
-                    // ⭐ FIX 3: Changed from bytes.refTo(0) to bytes.usePinned { it.addressOf(0) }
                     memScoped {
                         nsData.getBytes(bytes.usePinned { it.addressOf(0) }, nsData.length)
                     }
@@ -295,7 +292,6 @@ class IosBleManager : NSObject(), BleManager, CBCentralManagerDelegateProtocol, 
                 val data = didUpdateValueForCharacteristic.value
                 data?.let { nsData ->
                     val bytes = ByteArray(nsData.length.toInt())
-                    // ⭐ FIX 3: Changed from bytes.refTo(0) to bytes.usePinned { it.addressOf(0) }
                     memScoped {
                         nsData.getBytes(bytes.usePinned { it.addressOf(0) }, nsData.length)
                     }
