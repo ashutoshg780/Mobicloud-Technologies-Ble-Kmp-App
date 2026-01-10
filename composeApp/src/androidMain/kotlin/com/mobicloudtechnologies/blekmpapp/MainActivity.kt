@@ -490,7 +490,7 @@ fun ModernDeviceCard(device: BleDevice, onConnect: () -> Unit) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Filled.Fingerprint,
+                            Icons.Filled.PermDeviceInformation,
                             contentDescription = null,
                             modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
