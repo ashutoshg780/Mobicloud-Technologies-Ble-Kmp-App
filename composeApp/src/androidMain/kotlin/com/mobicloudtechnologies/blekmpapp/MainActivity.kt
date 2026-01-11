@@ -1,6 +1,10 @@
 package com.mobicloudtechnologies.blekmpapp
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -10,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -36,6 +42,10 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     private lateinit var bleRepository: BleRepository
+    private val bluetoothAdapter: BluetoothAdapter? by lazy {
+        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        bluetoothManager.adapter
+    }
 
     private val bluetoothPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         arrayOf(
@@ -60,6 +70,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ✅ Bluetooth enable request
+    private val enableBluetoothLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { /* Bluetooth enabled/disabled */ }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -76,7 +91,11 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    BleApp(bleRepository)
+                    BleApp(
+                        repository = bleRepository,
+                        bluetoothAdapter = bluetoothAdapter,
+                        onEnableBluetooth = { requestEnableBluetooth() }
+                    )
                 }
             }
         }
@@ -89,6 +108,14 @@ class MainActivity : ComponentActivity() {
 
         if (missingPermissions.isNotEmpty()) {
             requestPermissionLauncher.launch(missingPermissions.toTypedArray())
+        }
+    }
+
+    // ✅ Request Bluetooth Enable
+    private fun requestEnableBluetooth() {
+        if (bluetoothAdapter?.isEnabled == false) {
+            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            enableBluetoothLauncher.launch(enableBtIntent)
         }
     }
 }
@@ -124,12 +151,73 @@ fun BleAppTheme(content: @Composable () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BleApp(repository: BleRepository) {
+fun BleApp(
+    repository: BleRepository,
+    bluetoothAdapter: BluetoothAdapter?,
+    onEnableBluetooth: () -> Unit
+) {
     val scannedDevices by repository.scannedDevices.collectAsState()
     val connectionState by repository.connectionState.collectAsState()
     val deviceInfo by repository.deviceInfo.collectAsState()
 
     var selectedTab by remember { mutableStateOf(0) }
+    var showBluetoothDialog by remember { mutableStateOf(false) }
+
+    // ✅ Bluetooth Enabled State
+    var isBluetoothEnabled by remember {
+        mutableStateOf(bluetoothAdapter?.isEnabled == true)
+    }
+
+    // ✅ Check Bluetooth Status Periodically
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(1000)
+        while (true) {
+            isBluetoothEnabled = bluetoothAdapter?.isEnabled == true
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
+    // ✅ Bluetooth Enable Dialog
+    if (showBluetoothDialog) {
+        AlertDialog(
+            onDismissRequest = { showBluetoothDialog = false },
+            icon = {
+                Icon(
+                    Icons.Filled.Bluetooth,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    "Enable Bluetooth",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text("Bluetooth is required to scan and connect to BLE devices. Would you like to enable it now?")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showBluetoothDialog = false
+                        onEnableBluetooth()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text("Enable")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBluetoothDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -155,7 +243,9 @@ fun BleApp(repository: BleRepository) {
                 actions = {
                     ConnectionStatusIndicator(
                         connectionState = connectionState,
-                        hasDevices = scannedDevices.isNotEmpty()
+                        hasDevices = scannedDevices.isNotEmpty(),
+                        isBluetoothEnabled = isBluetoothEnabled,
+                        onBluetoothClick = { showBluetoothDialog = true }
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                 }
@@ -207,7 +297,12 @@ fun BleApp(repository: BleRepository) {
                 label = "tab_transition"
             ) { tab ->
                 when (tab) {
-                    0 -> ScanScreen(repository, scannedDevices)
+                    0 -> ScanScreen(
+                        repository = repository,
+                        devices = scannedDevices,
+                        isBluetoothEnabled = isBluetoothEnabled,
+                        onBluetoothClick = { showBluetoothDialog = true }
+                    )
                     1 -> DeviceInfoScreen(connectionState, deviceInfo, repository)
                 }
             }
@@ -215,11 +310,13 @@ fun BleApp(repository: BleRepository) {
     }
 }
 
-// ✅ FIXED: Dynamic Bluetooth Icon Based on Connection State + Device Count
+// ✅ FIXED: Clickable Bluetooth Icon with Dialog Trigger
 @Composable
 fun ConnectionStatusIndicator(
     connectionState: ConnectionState,
-    hasDevices: Boolean
+    hasDevices: Boolean,
+    isBluetoothEnabled: Boolean,
+    onBluetoothClick: () -> Unit
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val scale by infiniteTransition.animateFloat(
@@ -232,44 +329,48 @@ fun ConnectionStatusIndicator(
         label = "scale"
     )
 
-    // ✅ Icon logic:
-    // - Connected: BluetoothConnected
-    // - Connecting: BluetoothSearching (animated)
-    // - Devices Found: Bluetooth
-    // - No Devices: BluetoothDisabled
-    val (icon, iconColor, backgroundColor) = when (connectionState) {
-        is ConnectionState.Connected -> Triple(
+    // ✅ Icon logic with Bluetooth status
+    val (icon, iconColor, backgroundColor) = when {
+        connectionState is ConnectionState.Connected -> Triple(
             Icons.Filled.BluetoothConnected,
             Color(0xFF10B981),
             Color(0xFF10B981).copy(alpha = 0.2f)
         )
-        is ConnectionState.Connecting -> Triple(
+        connectionState is ConnectionState.Connecting -> Triple(
             Icons.AutoMirrored.Filled.BluetoothSearching,
             MaterialTheme.colorScheme.primary,
             MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
         )
-        else -> {
-            if (hasDevices) {
-                Triple(
-                    Icons.Filled.Bluetooth,
-                    MaterialTheme.colorScheme.primary,
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                )
-            } else {
-                Triple(
-                    Icons.Filled.BluetoothDisabled,
-                    Color(0xFF6B7280),
-                    Color(0xFF6B7280).copy(alpha = 0.2f)
-                )
-            }
-        }
+        !isBluetoothEnabled -> Triple(
+            Icons.Filled.BluetoothDisabled,
+            Color(0xFF6B7280),
+            Color(0xFF6B7280).copy(alpha = 0.2f)
+        )
+        hasDevices -> Triple(
+            Icons.Filled.Bluetooth,
+            MaterialTheme.colorScheme.primary,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+        )
+        else -> Triple(
+            Icons.Filled.BluetoothDisabled,
+            Color(0xFF6B7280),
+            Color(0xFF6B7280).copy(alpha = 0.2f)
+        )
     }
 
     Box(
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(backgroundColor),
+            .background(backgroundColor)
+            .then(
+                // ✅ Make clickable only when Bluetooth is disabled
+                if (!isBluetoothEnabled) {
+                    Modifier.clickable { onBluetoothClick() }
+                } else {
+                    Modifier
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
         when (connectionState) {
@@ -296,7 +397,11 @@ fun ConnectionStatusIndicator(
             else -> {
                 Icon(
                     icon,
-                    contentDescription = if (hasDevices) "Bluetooth Enabled" else "Bluetooth Disabled",
+                    contentDescription = if (isBluetoothEnabled) {
+                        if (hasDevices) "Bluetooth Enabled" else "No Devices"
+                    } else {
+                        "Bluetooth Disabled - Tap to Enable"
+                    },
                     tint = iconColor,
                     modifier = Modifier.size(24.dp)
                 )
@@ -305,8 +410,14 @@ fun ConnectionStatusIndicator(
     }
 }
 
+// ✅ FIXED: Scan Button with Bluetooth Check
 @Composable
-fun ScanScreen(repository: BleRepository, devices: List<BleDevice>) {
+fun ScanScreen(
+    repository: BleRepository,
+    devices: List<BleDevice>,
+    isBluetoothEnabled: Boolean,
+    onBluetoothClick: () -> Unit
+) {
     val scope = rememberCoroutineScope()
     var isScanning by remember { mutableStateOf(false) }
 
@@ -318,7 +429,10 @@ fun ScanScreen(repository: BleRepository, devices: List<BleDevice>) {
     ) {
         Button(
             onClick = {
-                if (isScanning) {
+                if (!isBluetoothEnabled) {
+                    // ✅ Show dialog if Bluetooth is disabled
+                    onBluetoothClick()
+                } else if (isScanning) {
                     repository.stopScanning()
                     isScanning = false
                 } else {
@@ -330,7 +444,11 @@ fun ScanScreen(repository: BleRepository, devices: List<BleDevice>) {
                 .fillMaxWidth()
                 .height(56.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (isScanning) Color(0xFFEF4444) else MaterialTheme.colorScheme.primary
+                containerColor = when {
+                    !isBluetoothEnabled -> Color(0xFF6B7280)
+                    isScanning -> Color(0xFFEF4444)
+                    else -> MaterialTheme.colorScheme.primary
+                }
             ),
             shape = RoundedCornerShape(16.dp),
             elevation = ButtonDefaults.buttonElevation(
@@ -339,13 +457,21 @@ fun ScanScreen(repository: BleRepository, devices: List<BleDevice>) {
             )
         ) {
             Icon(
-                if (isScanning) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                when {
+                    !isBluetoothEnabled -> Icons.Filled.BluetoothDisabled
+                    isScanning -> Icons.Filled.Stop
+                    else -> Icons.Filled.PlayArrow
+                },
                 contentDescription = null,
                 modifier = Modifier.size(24.dp)
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                if (isScanning) "Stop Scanning" else "Start Scanning",
+                when {
+                    !isBluetoothEnabled -> "Enable Bluetooth"
+                    isScanning -> "Stop Scanning"
+                    else -> "Start Scanning"
+                },
                 fontSize = MaterialTheme.typography.titleMedium.fontSize,
                 fontWeight = FontWeight.SemiBold
             )
@@ -408,7 +534,10 @@ fun ScanScreen(repository: BleRepository, devices: List<BleDevice>) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (devices.isEmpty()) {
+        if (!isBluetoothEnabled) {
+            // ✅ Bluetooth Disabled Message
+            BluetoothDisabledMessage(onClick = onBluetoothClick)
+        } else if (devices.isEmpty()) {
             EmptyDeviceList(isScanning)
         } else {
             LazyColumn(
@@ -421,6 +550,46 @@ fun ScanScreen(repository: BleRepository, devices: List<BleDevice>) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// ✅ NEW: Bluetooth Disabled Message
+@Composable
+fun BluetoothDisabledMessage(onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFEF3C7)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.Warning,
+                contentDescription = null,
+                tint = Color(0xFFF59E0B),
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Bluetooth is Disabled",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF92400E)
+                )
+                Text(
+                    "Tap to enable Bluetooth and start scanning",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF92400E).copy(alpha = 0.7f)
+                )
             }
         }
     }
@@ -473,6 +642,7 @@ fun EmptyDeviceList(isScanning: Boolean) {
     }
 }
 
+// Rest of the composables remain the same...
 @Composable
 fun ModernDeviceCard(device: BleDevice, onConnect: () -> Unit) {
     Card(
@@ -582,6 +752,7 @@ fun ModernDeviceCard(device: BleDevice, onConnect: () -> Unit) {
     }
 }
 
+// Device Info Screen and other composables remain unchanged...
 @Composable
 fun DeviceInfoScreen(
     connectionState: ConnectionState,

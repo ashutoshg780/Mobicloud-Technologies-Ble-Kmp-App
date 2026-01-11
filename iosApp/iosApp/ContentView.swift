@@ -1,18 +1,25 @@
 import SwiftUI
 import Shared
+import CoreBluetooth
 
 // MARK: - Main Content View
 struct ContentView: View {
     @StateObject private var viewModel = BleViewModel()
+    @StateObject private var bluetoothManager = BluetoothStatusManager()
     @State private var selectedTab = 0
+    @State private var showBluetoothAlert = false
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ScanView(viewModel: viewModel)
-                .tabItem {
-                    Label("Scan", systemImage: "antenna.radiowaves.left.and.right")
-                }
-                .tag(0)
+            ScanView(
+                viewModel: viewModel,
+                isBluetoothEnabled: bluetoothManager.isBluetoothEnabled,
+                onBluetoothAlert: { showBluetoothAlert = true }
+            )
+            .tabItem {
+                Label("Scan", systemImage: "antenna.radiowaves.left.and.right")
+            }
+            .tag(0)
 
             DeviceInfoView(viewModel: viewModel)
                 .tabItem {
@@ -21,12 +28,49 @@ struct ContentView: View {
                 .tag(1)
         }
         .accentColor(Color(hex: "6366F1"))
+        .alert("Enable Bluetooth", isPresented: $showBluetoothAlert) {
+            Button("Open Settings", role: .none) {
+                openBluetoothSettings()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Bluetooth is required to scan and connect to BLE devices. Please enable it in Settings.")
+        }
+    }
+
+    private func openBluetoothSettings() {
+        if let url = URL(string: "App-Prefs:root=Bluetooth") {
+            if UIApplication.shared.canOpenURL(url) {
+                UIApplication.shared.open(url)
+            } else if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(settingsUrl)
+            }
+        }
+    }
+}
+
+// MARK: - Bluetooth Status Manager
+class BluetoothStatusManager: NSObject, ObservableObject, CBCentralManagerDelegate {
+    @Published var isBluetoothEnabled = false
+    private var centralManager: CBCentralManager?
+
+    override init() {
+        super.init()
+        centralManager = CBCentralManager(delegate: self, queue: nil)
+    }
+
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        DispatchQueue.main.async {
+            self.isBluetoothEnabled = central.state == .poweredOn
+        }
     }
 }
 
 // MARK: - Scan View
 struct ScanView: View {
     @ObservedObject var viewModel: BleViewModel
+    let isBluetoothEnabled: Bool
+    let onBluetoothAlert: () -> Void
 
     var body: some View {
         NavigationView {
@@ -36,24 +80,35 @@ struct ScanView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        // ✅ FIXED: Top Bar with Dynamic Bluetooth Icon
+                        // ✅ Top Bar with Dynamic Bluetooth Icon
                         HStack {
                             Text("BLE Manager")
                                 .font(.system(size: 34, weight: .bold))
                             Spacer()
                             BluetoothStatusIcon(
                                 connectionState: viewModel.connectionState,
-                                hasDevices: !viewModel.scannedDevices.isEmpty
+                                hasDevices: !viewModel.scannedDevices.isEmpty,
+                                isBluetoothEnabled: isBluetoothEnabled,
+                                onBluetoothClick: onBluetoothAlert
                             )
                         }
                         .padding(.horizontal)
                         .padding(.top, 8)
 
-                        ScanButton(isScanning: viewModel.isScanning) {
-                            if viewModel.isScanning {
-                                viewModel.stopScan()
+                        // ✅ Scan Button with Bluetooth Check
+                        ScanButton(
+                            isScanning: viewModel.isScanning,
+                            isBluetoothEnabled: isBluetoothEnabled,
+                            onBluetoothAlert: onBluetoothAlert
+                        ) {
+                            if isBluetoothEnabled {
+                                if viewModel.isScanning {
+                                    viewModel.stopScan()
+                                } else {
+                                    viewModel.startScan()
+                                }
                             } else {
-                                viewModel.startScan()
+                                onBluetoothAlert()
                             }
                         }
                         .padding(.horizontal)
@@ -61,7 +116,11 @@ struct ScanView: View {
                         DeviceStatsCard(deviceCount: viewModel.scannedDevices.count)
                             .padding(.horizontal)
 
-                        if viewModel.scannedDevices.isEmpty {
+                        // ✅ Bluetooth Disabled Warning or Device List
+                        if !isBluetoothEnabled {
+                            BluetoothDisabledWarning(onClick: onBluetoothAlert)
+                                .padding(.horizontal)
+                        } else if viewModel.scannedDevices.isEmpty {
                             EmptyDeviceList(isScanning: viewModel.isScanning)
                                 .padding(.top, 32)
                         } else {
@@ -83,10 +142,12 @@ struct ScanView: View {
     }
 }
 
-// ✅ NEW: Bluetooth Status Icon Component
+// ✅ NEW: Bluetooth Status Icon with Click Support
 struct BluetoothStatusIcon: View {
     let connectionState: ConnectionState
     let hasDevices: Bool
+    let isBluetoothEnabled: Bool
+    let onBluetoothClick: () -> Void
 
     @State private var isAnimating = false
 
@@ -97,6 +158,9 @@ struct BluetoothStatusIcon: View {
         case is ConnectionState.Connecting:
             return "dot.radiowaves.left.and.right"
         default:
+            if !isBluetoothEnabled {
+                return "bluetooth.slash"
+            }
             return hasDevices ? "bluetooth" : "bluetooth.slash"
         }
     }
@@ -108,6 +172,9 @@ struct BluetoothStatusIcon: View {
         case is ConnectionState.Connecting:
             return Color(hex: "6366F1")
         default:
+            if !isBluetoothEnabled {
+                return Color(hex: "6B7280")
+            }
             return hasDevices ? Color(hex: "6366F1") : Color(hex: "6B7280")
         }
     }
@@ -136,35 +203,115 @@ struct BluetoothStatusIcon: View {
         .onChange(of: connectionState) { newState in
             isAnimating = newState is ConnectionState.Connecting
         }
+        // ✅ Make clickable when Bluetooth is disabled
+        .onTapGesture {
+            if !isBluetoothEnabled {
+                onBluetoothClick()
+            }
+        }
     }
 }
 
-// MARK: - Scan Button
+// ✅ UPDATED: Scan Button with Bluetooth State
 struct ScanButton: View {
     let isScanning: Bool
+    let isBluetoothEnabled: Bool
+    let onBluetoothAlert: () -> Void
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: isScanning ? "stop.fill" : "play.fill")
+                Image(systemName: buttonIcon)
                     .font(.system(size: 20, weight: .semibold))
-                Text(isScanning ? "Stop Scanning" : "Start Scanning")
+                Text(buttonText)
                     .font(.system(size: 17, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
             .frame(height: 56)
-            .background(
-                LinearGradient(
-                    colors: isScanning ? [Color(hex: "EF4444"), Color(hex: "DC2626")] : [Color(hex: "6366F1"), Color(hex: "8B5CF6")],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
+            .background(buttonGradient)
             .foregroundColor(.white)
             .cornerRadius(16)
-            .shadow(color: (isScanning ? Color(hex: "EF4444") : Color(hex: "6366F1")).opacity(0.3), radius: 8, x: 0, y: 4)
+            .shadow(color: buttonShadowColor, radius: 8, x: 0, y: 4)
         }
+    }
+
+    private var buttonIcon: String {
+        if !isBluetoothEnabled {
+            return "bluetooth.slash"
+        }
+        return isScanning ? "stop.fill" : "play.fill"
+    }
+
+    private var buttonText: String {
+        if !isBluetoothEnabled {
+            return "Enable Bluetooth"
+        }
+        return isScanning ? "Stop Scanning" : "Start Scanning"
+    }
+
+    private var buttonGradient: LinearGradient {
+        if !isBluetoothEnabled {
+            return LinearGradient(
+                colors: [Color(hex: "6B7280"), Color(hex: "4B5563")],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        if isScanning {
+            return LinearGradient(
+                colors: [Color(hex: "EF4444"), Color(hex: "DC2626")],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        return LinearGradient(
+            colors: [Color(hex: "6366F1"), Color(hex: "8B5CF6")],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private var buttonShadowColor: Color {
+        if !isBluetoothEnabled {
+            return Color(hex: "6B7280").opacity(0.3)
+        }
+        return (isScanning ? Color(hex: "EF4444") : Color(hex: "6366F1")).opacity(0.3)
+    }
+}
+
+// ✅ NEW: Bluetooth Disabled Warning Card
+struct BluetoothDisabledWarning: View {
+    let onClick: () -> Void
+
+    var body: some View {
+        Button(action: onClick) {
+            HStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(Color(hex: "F59E0B"))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Bluetooth is Disabled")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(Color(hex: "92400E"))
+
+                    Text("Tap to enable Bluetooth and start scanning")
+                        .font(.system(size: 14))
+                        .foregroundColor(Color(hex: "92400E").opacity(0.7))
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color(hex: "92400E"))
+            }
+            .padding(20)
+            .background(Color(hex: "FEF3C7"))
+            .cornerRadius(16)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
@@ -319,7 +466,7 @@ struct ModernDeviceCard: View {
     }
 }
 
-// MARK: - Device Info View (Rest remains same...)
+// MARK: - Device Info View
 struct DeviceInfoView: View {
     @ObservedObject var viewModel: BleViewModel
 
