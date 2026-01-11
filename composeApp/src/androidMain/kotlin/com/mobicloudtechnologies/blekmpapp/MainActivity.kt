@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -152,7 +153,10 @@ fun BleApp(repository: BleRepository) {
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
                 actions = {
-                    ConnectionStatusIndicator(connectionState)
+                    ConnectionStatusIndicator(
+                        connectionState = connectionState,
+                        hasDevices = scannedDevices.isNotEmpty()
+                    )
                     Spacer(modifier = Modifier.width(16.dp))
                 }
             )
@@ -211,8 +215,12 @@ fun BleApp(repository: BleRepository) {
     }
 }
 
+// ✅ FIXED: Dynamic Bluetooth Icon Based on Connection State + Device Count
 @Composable
-fun ConnectionStatusIndicator(connectionState: ConnectionState) {
+fun ConnectionStatusIndicator(
+    connectionState: ConnectionState,
+    hasDevices: Boolean
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -224,42 +232,72 @@ fun ConnectionStatusIndicator(connectionState: ConnectionState) {
         label = "scale"
     )
 
+    // ✅ Icon logic:
+    // - Connected: BluetoothConnected
+    // - Connecting: BluetoothSearching (animated)
+    // - Devices Found: Bluetooth
+    // - No Devices: BluetoothDisabled
+    val (icon, iconColor, backgroundColor) = when (connectionState) {
+        is ConnectionState.Connected -> Triple(
+            Icons.Filled.BluetoothConnected,
+            Color(0xFF10B981),
+            Color(0xFF10B981).copy(alpha = 0.2f)
+        )
+        is ConnectionState.Connecting -> Triple(
+            Icons.AutoMirrored.Filled.BluetoothSearching,
+            MaterialTheme.colorScheme.primary,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+        )
+        else -> {
+            if (hasDevices) {
+                Triple(
+                    Icons.Filled.Bluetooth,
+                    MaterialTheme.colorScheme.primary,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                )
+            } else {
+                Triple(
+                    Icons.Filled.BluetoothDisabled,
+                    Color(0xFF6B7280),
+                    Color(0xFF6B7280).copy(alpha = 0.2f)
+                )
+            }
+        }
+    }
+
     Box(
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(
-                when (connectionState) {
-                    is ConnectionState.Connected -> Color(0xFF10B981).copy(alpha = 0.2f)
-                    is ConnectionState.Connecting -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                    else -> Color(0xFF6B7280).copy(alpha = 0.2f)
-                }
-            ),
+            .background(backgroundColor),
         contentAlignment = Alignment.Center
     ) {
         when (connectionState) {
             is ConnectionState.Connected -> {
                 Icon(
-                    Icons.Filled.CheckCircle,
+                    icon,
                     contentDescription = "Connected",
-                    tint = Color(0xFF10B981),
+                    tint = iconColor,
                     modifier = Modifier
                         .size(24.dp)
                         .scale(scale)
                 )
             }
             is ConnectionState.Connecting -> {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 2.dp
+                Icon(
+                    icon,
+                    contentDescription = "Connecting",
+                    tint = iconColor,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .scale(scale)
                 )
             }
             else -> {
                 Icon(
-                    Icons.Filled.BluetoothDisabled,
-                    contentDescription = "Disconnected",
-                    tint = Color(0xFF6B7280),
+                    icon,
+                    contentDescription = if (hasDevices) "Bluetooth Enabled" else "Bluetooth Disabled",
+                    tint = iconColor,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -637,7 +675,6 @@ fun DeviceInfoScreen(
                         BatterySection(battery)
                     }
 
-                    // ⭐ HEART RATE SECTION - NEW!
                     info.heartRate?.let { heartRate ->
                         Spacer(modifier = Modifier.height(20.dp))
                         Divider(color = MaterialTheme.colorScheme.surfaceVariant)
@@ -822,7 +859,6 @@ fun BatterySection(battery: BatteryLevel) {
     }
 }
 
-// ⭐ HEART RATE SECTION - NEW!
 @Composable
 fun HeartRateSection(heartRate: HeartRate) {
     Column {

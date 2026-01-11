@@ -36,6 +36,19 @@ struct ScanView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
+                        // ✅ FIXED: Top Bar with Dynamic Bluetooth Icon
+                        HStack {
+                            Text("BLE Manager")
+                                .font(.system(size: 34, weight: .bold))
+                            Spacer()
+                            BluetoothStatusIcon(
+                                connectionState: viewModel.connectionState,
+                                hasDevices: !viewModel.scannedDevices.isEmpty
+                            )
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+
                         ScanButton(isScanning: viewModel.isScanning) {
                             if viewModel.isScanning {
                                 viewModel.stopScan()
@@ -44,7 +57,6 @@ struct ScanView: View {
                             }
                         }
                         .padding(.horizontal)
-                        .padding(.top, 8)
 
                         DeviceStatsCard(deviceCount: viewModel.scannedDevices.count)
                             .padding(.horizontal)
@@ -66,8 +78,63 @@ struct ScanView: View {
                     .padding(.vertical)
                 }
             }
-            .navigationTitle("BLE Manager")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarHidden(true)
+        }
+    }
+}
+
+// ✅ NEW: Bluetooth Status Icon Component
+struct BluetoothStatusIcon: View {
+    let connectionState: ConnectionState
+    let hasDevices: Bool
+
+    @State private var isAnimating = false
+
+    var iconName: String {
+        switch connectionState {
+        case is ConnectionState.Connected:
+            return "bluetooth.connected"
+        case is ConnectionState.Connecting:
+            return "dot.radiowaves.left.and.right"
+        default:
+            return hasDevices ? "bluetooth" : "bluetooth.slash"
+        }
+    }
+
+    var iconColor: Color {
+        switch connectionState {
+        case is ConnectionState.Connected:
+            return Color(hex: "10B981")
+        case is ConnectionState.Connecting:
+            return Color(hex: "6366F1")
+        default:
+            return hasDevices ? Color(hex: "6366F1") : Color(hex: "6B7280")
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(iconColor.opacity(0.2))
+                .frame(width: 40, height: 40)
+
+            Image(systemName: iconName)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(iconColor)
+                .scaleEffect(isAnimating ? 1.2 : 1.0)
+                .animation(
+                    connectionState is ConnectionState.Connecting ?
+                        Animation.easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
+                    value: isAnimating
+                )
+        }
+        .onAppear {
+            if connectionState is ConnectionState.Connecting {
+                isAnimating = true
+            }
+        }
+        .onChange(of: connectionState) { newState in
+            isAnimating = newState is ConnectionState.Connecting
         }
     }
 }
@@ -252,7 +319,7 @@ struct ModernDeviceCard: View {
     }
 }
 
-// MARK: - Device Info View
+// MARK: - Device Info View (Rest remains same...)
 struct DeviceInfoView: View {
     @ObservedObject var viewModel: BleViewModel
 
@@ -675,8 +742,6 @@ class BleViewModel: ObservableObject {
     @Published var isScanning: Bool = false
 
     init() {
-        // createBleManager() is in Platform.ios.kt as expect/actual function
-        // Kotlin files export top-level functions as <FileName>Kt
         self.bleManager = PlatformKt.createBleManager()
         setupObservers()
     }
@@ -754,4 +819,4 @@ extension Color {
 // MARK: - Preview
 #Preview {
     ContentView()
-}-
+}
