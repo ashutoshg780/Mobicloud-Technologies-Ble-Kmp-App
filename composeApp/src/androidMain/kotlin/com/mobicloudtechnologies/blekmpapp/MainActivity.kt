@@ -31,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -65,24 +64,19 @@ class MainActivity : ComponentActivity() {
     ) { permissions ->
         if (permissions.all { it.value }) {
             // Permissions granted
-        } else {
-            // Permissions denied
         }
     }
 
-    // ✅ Bluetooth enable request
     private val enableBluetoothLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { /* Bluetooth enabled/disabled */ }
+    ) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize BLE Manager
         initializeBleManager(applicationContext)
         bleRepository = BleRepository(createBleManager())
 
-        // Request permissions
         checkAndRequestPermissions()
 
         setContent {
@@ -111,7 +105,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ✅ Request Bluetooth Enable
     private fun requestEnableBluetooth() {
         if (bluetoothAdapter?.isEnabled == false) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
@@ -163,12 +156,10 @@ fun BleApp(
     var selectedTab by remember { mutableStateOf(0) }
     var showBluetoothDialog by remember { mutableStateOf(false) }
 
-    // ✅ Bluetooth Enabled State
     var isBluetoothEnabled by remember {
         mutableStateOf(bluetoothAdapter?.isEnabled == true)
     }
 
-    // ✅ Check Bluetooth Status Periodically
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(1000)
         while (true) {
@@ -177,7 +168,6 @@ fun BleApp(
         }
     }
 
-    // ✅ Bluetooth Enable Dialog
     if (showBluetoothDialog) {
         AlertDialog(
             onDismissRequest = { showBluetoothDialog = false },
@@ -270,11 +260,22 @@ fun BleApp(
                 )
                 NavigationBarItem(
                     icon = {
-                        Icon(
-                            Icons.Filled.Devices,
-                            contentDescription = "Device",
-                            modifier = Modifier.size(24.dp)
-                        )
+                        Box {
+                            Icon(
+                                Icons.Filled.Devices,
+                                contentDescription = "Device",
+                                modifier = Modifier.size(24.dp)
+                            )
+                            if (connectionState is ConnectionState.Connected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 4.dp, y = (-4).dp)
+                                        .background(Color(0xFF10B981), CircleShape)
+                                )
+                            }
+                        }
                     },
                     label = { Text("Device", fontWeight = FontWeight.Medium) },
                     selected = selectedTab == 1,
@@ -300,6 +301,7 @@ fun BleApp(
                     0 -> ScanScreen(
                         repository = repository,
                         devices = scannedDevices,
+                        connectionState = connectionState,
                         isBluetoothEnabled = isBluetoothEnabled,
                         onBluetoothClick = { showBluetoothDialog = true }
                     )
@@ -310,7 +312,6 @@ fun BleApp(
     }
 }
 
-// ✅ FIXED: Clickable Bluetooth Icon with Dialog Trigger
 @Composable
 fun ConnectionStatusIndicator(
     connectionState: ConnectionState,
@@ -329,7 +330,6 @@ fun ConnectionStatusIndicator(
         label = "scale"
     )
 
-    // ✅ Icon logic with Bluetooth status
     val (icon, iconColor, backgroundColor) = when {
         connectionState is ConnectionState.Connected -> Triple(
             Icons.Filled.BluetoothConnected,
@@ -364,7 +364,6 @@ fun ConnectionStatusIndicator(
             .clip(CircleShape)
             .background(backgroundColor)
             .then(
-                // ✅ Make clickable only when Bluetooth is disabled
                 if (!isBluetoothEnabled) {
                     Modifier.clickable { onBluetoothClick() }
                 } else {
@@ -410,11 +409,12 @@ fun ConnectionStatusIndicator(
     }
 }
 
-// ✅ FIXED: Scan Button with Bluetooth Check
+// MainActivity.kt - UPDATE ScanScreen function
 @Composable
 fun ScanScreen(
     repository: BleRepository,
     devices: List<BleDevice>,
+    connectionState: ConnectionState,
     isBluetoothEnabled: Boolean,
     onBluetoothClick: () -> Unit
 ) {
@@ -427,10 +427,14 @@ fun ScanScreen(
             .background(MaterialTheme.colorScheme.background)
             .padding(16.dp)
     ) {
+        if (connectionState is ConnectionState.Connected) {
+            ConnectedBanner(connectionState.device)
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
         Button(
             onClick = {
                 if (!isBluetoothEnabled) {
-                    // ✅ Show dialog if Bluetooth is disabled
                     onBluetoothClick()
                 } else if (isScanning) {
                     repository.stopScanning()
@@ -535,7 +539,6 @@ fun ScanScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         if (!isBluetoothEnabled) {
-            // ✅ Bluetooth Disabled Message
             BluetoothDisabledMessage(onClick = onBluetoothClick)
         } else if (devices.isEmpty()) {
             EmptyDeviceList(isScanning)
@@ -544,7 +547,15 @@ fun ScanScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(devices) { device ->
-                    ModernDeviceCard(device = device) {
+                    val connectingDeviceId = (connectionState as? ConnectionState.Connecting)?.device?.id
+
+                    ModernDeviceCard(
+                        device = device,
+                        isConnected = connectionState is ConnectionState.Connected &&
+                                (connectionState as? ConnectionState.Connected)?.device?.id == device.id,
+                        isConnecting = connectionState is ConnectionState.Connecting &&
+                                connectingDeviceId == device.id
+                    ) {
                         scope.launch {
                             repository.connectToDevice(device)
                         }
@@ -555,7 +566,207 @@ fun ScanScreen(
     }
 }
 
-// ✅ NEW: Bluetooth Disabled Message
+//@Composable
+//fun ScanScreen(
+//    repository: BleRepository,
+//    devices: List<BleDevice>,
+//    connectionState: ConnectionState,
+//    isBluetoothEnabled: Boolean,
+//    onBluetoothClick: () -> Unit
+//) {
+//    val scope = rememberCoroutineScope()
+//    var isScanning by remember { mutableStateOf(false) }
+//
+//    Column(
+//        modifier = Modifier
+//            .fillMaxSize()
+//            .background(MaterialTheme.colorScheme.background)
+//            .padding(16.dp)
+//    ) {
+//        if (connectionState is ConnectionState.Connected) {
+//            ConnectedBanner(connectionState.device)
+//            Spacer(modifier = Modifier.height(12.dp))
+//        }
+//
+//        Button(
+//            onClick = {
+//                if (!isBluetoothEnabled) {
+//                    onBluetoothClick()
+//                } else if (isScanning) {
+//                    repository.stopScanning()
+//                    isScanning = false
+//                } else {
+//                    repository.startScanning()
+//                    isScanning = true
+//                }
+//            },
+//            modifier = Modifier
+//                .fillMaxWidth()
+//                .height(56.dp),
+//            colors = ButtonDefaults.buttonColors(
+//                containerColor = when {
+//                    !isBluetoothEnabled -> Color(0xFF6B7280)
+//                    isScanning -> Color(0xFFEF4444)
+//                    else -> MaterialTheme.colorScheme.primary
+//                }
+//            ),
+//            shape = RoundedCornerShape(16.dp),
+//            elevation = ButtonDefaults.buttonElevation(
+//                defaultElevation = 4.dp,
+//                pressedElevation = 8.dp
+//            )
+//        ) {
+//            Icon(
+//                when {
+//                    !isBluetoothEnabled -> Icons.Filled.BluetoothDisabled
+//                    isScanning -> Icons.Filled.Stop
+//                    else -> Icons.Filled.PlayArrow
+//                },
+//                contentDescription = null,
+//                modifier = Modifier.size(24.dp)
+//            )
+//            Spacer(modifier = Modifier.width(12.dp))
+//            Text(
+//                when {
+//                    !isBluetoothEnabled -> "Enable Bluetooth"
+//                    isScanning -> "Stop Scanning"
+//                    else -> "Start Scanning"
+//                },
+//                fontSize = MaterialTheme.typography.titleMedium.fontSize,
+//                fontWeight = FontWeight.SemiBold
+//            )
+//        }
+//
+//        Spacer(modifier = Modifier.height(24.dp))
+//
+//        Card(
+//            modifier = Modifier.fillMaxWidth(),
+//            shape = RoundedCornerShape(20.dp),
+//            colors = CardDefaults.cardColors(
+//                containerColor = MaterialTheme.colorScheme.surface
+//            ),
+//            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+//        ) {
+//            Row(
+//                modifier = Modifier
+//                    .fillMaxWidth()
+//                    .padding(20.dp),
+//                horizontalArrangement = Arrangement.SpaceBetween,
+//                verticalAlignment = Alignment.CenterVertically
+//            ) {
+//                Column {
+//                    Text(
+//                        "Devices Found",
+//                        style = MaterialTheme.typography.bodyMedium,
+//                        color = MaterialTheme.colorScheme.onSurfaceVariant
+//                    )
+//                    Text(
+//                        "${devices.size}",
+//                        style = MaterialTheme.typography.headlineLarge,
+//                        color = MaterialTheme.colorScheme.primary,
+//                        fontWeight = FontWeight.Bold
+//                    )
+//                }
+//
+//                Box(
+//                    modifier = Modifier
+//                        .size(60.dp)
+//                        .clip(CircleShape)
+//                        .background(
+//                            Brush.linearGradient(
+//                                colors = listOf(
+//                                    MaterialTheme.colorScheme.primary,
+//                                    MaterialTheme.colorScheme.secondary
+//                                )
+//                            )
+//                        ),
+//                    contentAlignment = Alignment.Center
+//                ) {
+//                    Icon(
+//                        Icons.Filled.Devices,
+//                        contentDescription = null,
+//                        tint = Color.White,
+//                        modifier = Modifier.size(32.dp)
+//                    )
+//                }
+//            }
+//        }
+//
+//        Spacer(modifier = Modifier.height(16.dp))
+//
+//        if (!isBluetoothEnabled) {
+//            BluetoothDisabledMessage(onClick = onBluetoothClick)
+//        } else if (devices.isEmpty()) {
+//            EmptyDeviceList(isScanning)
+//        } else {
+//            LazyColumn(
+//                verticalArrangement = Arrangement.spacedBy(12.dp)
+//            ) {
+//                items(devices) { device ->
+//                    val connectingDeviceId = (connectionState as? ConnectionState.Connecting)?.device?.id
+//
+//                    ModernDeviceCard(
+//                        device = device,
+//                        isConnected = connectionState is ConnectionState.Connected &&
+//                                (connectionState as? ConnectionState.Connected)?.device?.id == device.id,
+//                        isConnecting = connectionState is ConnectionState.Connecting &&
+//                                connectingDeviceId == device.id
+//                    ) {
+//                        scope.launch {
+//                            repository.connectToDevice(device)
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    }
+//}
+
+@Composable
+fun ConnectedBanner(device: BleDevice) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF10B981).copy(alpha = 0.1f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.CheckCircle,
+                contentDescription = null,
+                tint = Color(0xFF10B981),
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Connected",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF10B981),
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    device.name ?: "Unknown Device",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Icon(
+                Icons.Filled.BluetoothConnected,
+                contentDescription = null,
+                tint = Color(0xFF10B981),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
 @Composable
 fun BluetoothDisabledMessage(onClick: () -> Unit) {
     Card(
@@ -642,15 +853,23 @@ fun EmptyDeviceList(isScanning: Boolean) {
     }
 }
 
-// Rest of the composables remain the same...
 @Composable
-fun ModernDeviceCard(device: BleDevice, onConnect: () -> Unit) {
+fun ModernDeviceCard(
+    device: BleDevice,
+    isConnected: Boolean = false,
+    isConnecting: Boolean = false,
+    onConnect: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isConnected) {
+                Color(0xFF10B981).copy(alpha = 0.05f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
         )
     ) {
         Row(
@@ -669,19 +888,28 @@ fun ModernDeviceCard(device: BleDevice, onConnect: () -> Unit) {
                         .size(56.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    MaterialTheme.colorScheme.secondaryContainer
+                            if (isConnected) {
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        Color(0xFF10B981),
+                                        Color(0xFF059669)
+                                    )
                                 )
-                            )
+                            } else {
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        MaterialTheme.colorScheme.secondaryContainer
+                                    )
+                                )
+                            }
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Filled.Bluetooth,
+                        if (isConnected) Icons.Filled.BluetoothConnected else Icons.Filled.Bluetooth,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = if (isConnected) Color.White else MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -732,27 +960,142 @@ fun ModernDeviceCard(device: BleDevice, onConnect: () -> Unit) {
                 }
             }
 
-            Button(
-                onClick = onConnect,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary
+            DeviceStatusButton(
+                isConnected = isConnected,
+                isConnecting = isConnecting,
+                onConnect = onConnect
+            )
+
+//            if (isConnected) {
+//                Surface(
+//                    shape = RoundedCornerShape(12.dp),
+//                    color = Color(0xFF10B981).copy(alpha = 0.2f)
+//                ) {
+//                    Row(
+//                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+//                        verticalAlignment = Alignment.CenterVertically
+//                    ) {
+//                        Icon(
+//                            Icons.Filled.CheckCircle,
+//                            contentDescription = null,
+//                            modifier = Modifier.size(18.dp),
+//                            tint = Color(0xFF10B981)
+//                        )
+//                        Spacer(modifier = Modifier.width(6.dp))
+//                        Text(
+//                            "Connected",
+//                            fontWeight = FontWeight.Medium,
+//                            color = Color(0xFF10B981),
+//                            style = MaterialTheme.typography.bodyMedium
+//                        )
+//                    }
+//                }
+//            } else if (isConnecting) {
+//                Surface(
+//                    shape = RoundedCornerShape(12.dp),
+//                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+//                ) {
+//                    Row(
+//                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+//                        verticalAlignment = Alignment.CenterVertically
+//                    ) {
+//                        CircularProgressIndicator(
+//                            modifier = Modifier.size(18.dp),
+//                            strokeWidth = 2.dp,
+//                            color = MaterialTheme.colorScheme.primary
+//                        )
+//                        Spacer(modifier = Modifier.width(6.dp))
+//                        Text(
+//                            "Connecting",
+//                            fontWeight = FontWeight.Medium,
+//                            color = MaterialTheme.colorScheme.primary,
+//                            style = MaterialTheme.typography.bodyMedium
+//                        )
+//                    }
+//                }
+//            } else {
+//                Button(
+//                    onClick = onConnect,
+//                    colors = ButtonDefaults.buttonColors(
+//                        containerColor = MaterialTheme.colorScheme.primary
+//                    ),
+//                    shape = RoundedCornerShape(12.dp),
+//                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
+//                ) {
+//                    Icon(
+//                        Icons.Filled.Link,
+//                        contentDescription = null,
+//                        modifier = Modifier.size(18.dp)
+//                    )
+//                    Spacer(modifier = Modifier.width(8.dp))
+//                    Text("Connect", fontWeight = FontWeight.Medium)
+//                }
+//            }
+        }
+    }
+}
+
+@Composable
+fun DeviceStatusButton(
+    isConnected: Boolean,
+    isConnecting: Boolean,
+    onConnect: () -> Unit
+) {
+    val bgColor = when {
+        isConnected -> Color(0xFF10B981)
+        isConnecting -> MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    val contentColor = when {
+        isConnected -> Color.White
+        isConnecting -> MaterialTheme.colorScheme.primary
+        else -> Color.White
+    }
+
+    Surface(
+        modifier = Modifier.height(44.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = bgColor
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .fillMaxHeight()
+                .then(
+                    if (!isConnected && !isConnecting)
+                        Modifier.clickable { onConnect() }
+                    else Modifier
                 ),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp)
-            ) {
-                Icon(
-                    Icons.Filled.Link,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Connect", fontWeight = FontWeight.Medium)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            when {
+                isConnected -> {
+                    Icon(Icons.Filled.Check, null, tint = contentColor, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Connected", color = contentColor, fontWeight = FontWeight.Medium)
+                }
+                isConnecting -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = contentColor
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Connecting", color = contentColor, fontWeight = FontWeight.Medium)
+                }
+                else -> {
+                    Icon(Icons.Filled.Link, null, tint = contentColor, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Connect", color = contentColor, fontWeight = FontWeight.Medium)
+                }
             }
         }
     }
 }
 
-// Device Info Screen and other composables remain unchanged...
+
 @Composable
 fun DeviceInfoScreen(
     connectionState: ConnectionState,

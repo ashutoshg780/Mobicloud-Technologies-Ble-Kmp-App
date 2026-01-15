@@ -2,7 +2,6 @@ package com.mobicloudtechnologies.blekmpapp
 
 import android.content.Context
 import com.mobicloudtechnologies.blekmpapp.ble.BleManager
-import com.mobicloudtechnologies.blekmpapp.ble.AndroidBleManager
 
 class AndroidPlatform : Platform {
     override val name: String = "Android ${android.os.Build.VERSION.SDK_INT}"
@@ -10,12 +9,12 @@ class AndroidPlatform : Platform {
 
 actual fun getPlatform(): Platform = AndroidPlatform()
 
-private var bleManagerInstance: AndroidBleManager? = null
+private var bleManagerInstance: BleManager? = null
 
 fun initializeBleManager(context: Context) {
-    bleManagerInstance = AndroidBleManager(context)
+    bleManagerInstance = BleManager(context)
 }
 
 actual fun createBleManager(): BleManager {
-    return bleManagerInstance ?: throw IllegalStateException("BleManager not initialized")
+    return bleManagerInstance ?: throw IllegalStateException("BleManager not initialized. Call initializeBleManager(context) first")
 }

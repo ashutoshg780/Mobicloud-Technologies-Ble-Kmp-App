@@ -23,7 +23,13 @@ struct ContentView: View {
 
             DeviceInfoView(viewModel: viewModel)
                 .tabItem {
-                    Label("Device", systemImage: "device.laptop")
+                    // ✅ FIX: Add badge when connected
+                    if viewModel.connectionState is ConnectionState.Connected {
+                        Label("Device", systemImage: "device.laptop")
+                            .badge(1)
+                    } else {
+                        Label("Device", systemImage: "device.laptop")
+                    }
                 }
                 .tag(1)
         }
@@ -66,7 +72,6 @@ class BluetoothStatusManager: NSObject, ObservableObject, CBCentralManagerDelega
     }
 }
 
-// MARK: - Scan View
 struct ScanView: View {
     @ObservedObject var viewModel: BleViewModel
     let isBluetoothEnabled: Bool
@@ -80,7 +85,6 @@ struct ScanView: View {
 
                 ScrollView {
                     VStack(spacing: 16) {
-                        // ✅ Top Bar with Dynamic Bluetooth Icon
                         HStack {
                             Text("BLE Manager")
                                 .font(.system(size: 34, weight: .bold))
@@ -95,7 +99,13 @@ struct ScanView: View {
                         .padding(.horizontal)
                         .padding(.top, 8)
 
-                        // ✅ Scan Button with Bluetooth Check
+                        if viewModel.connectionState is ConnectionState.Connected {
+                            if let connectedState = viewModel.connectionState as? ConnectionState.Connected {
+                                ConnectedBanner(device: connectedState.device)
+                                    .padding(.horizontal)
+                            }
+                        }
+
                         ScanButton(
                             isScanning: viewModel.isScanning,
                             isBluetoothEnabled: isBluetoothEnabled,
@@ -116,7 +126,6 @@ struct ScanView: View {
                         DeviceStatsCard(deviceCount: viewModel.scannedDevices.count)
                             .padding(.horizontal)
 
-                        // ✅ Bluetooth Disabled Warning or Device List
                         if !isBluetoothEnabled {
                             BluetoothDisabledWarning(onClick: onBluetoothAlert)
                                 .padding(.horizontal)
@@ -126,7 +135,15 @@ struct ScanView: View {
                         } else {
                             LazyVStack(spacing: 12) {
                                 ForEach(viewModel.scannedDevices, id: \.id) { device in
-                                    ModernDeviceCard(device: device) {
+                                    let connectingDeviceId = (viewModel.connectionState as? ConnectionState.Connecting)?.device.id
+
+                                    ModernDeviceCard(
+                                        device: device,
+                                        isConnected: viewModel.connectionState is ConnectionState.Connected &&
+                                                    (viewModel.connectionState as? ConnectionState.Connected)?.device.id == device.id,
+                                        isConnecting: viewModel.connectionState is ConnectionState.Connecting &&
+                                                     connectingDeviceId == device.id
+                                    ) {
                                         viewModel.connect(to: device)
                                     }
                                 }
@@ -142,7 +159,128 @@ struct ScanView: View {
     }
 }
 
-// ✅ NEW: Bluetooth Status Icon with Click Support
+// MARK: - Scan View
+// struct ScanView: View {
+//     @ObservedObject var viewModel: BleViewModel
+//     let isBluetoothEnabled: Bool
+//     let onBluetoothAlert: () -> Void
+//
+//     var body: some View {
+//         NavigationView {
+//             ZStack {
+//                 Color(hex: "F8FAFC")
+//                     .ignoresSafeArea()
+//
+//                 ScrollView {
+//                     VStack(spacing: 16) {
+//                         HStack {
+//                             Text("BLE Manager")
+//                                 .font(.system(size: 34, weight: .bold))
+//                             Spacer()
+//                             // ✅ FIX: Connection state indicator
+//                             BluetoothStatusIcon(
+//                                 connectionState: viewModel.connectionState,
+//                                 hasDevices: !viewModel.scannedDevices.isEmpty,
+//                                 isBluetoothEnabled: isBluetoothEnabled,
+//                                 onBluetoothClick: onBluetoothAlert
+//                             )
+//                         }
+//                         .padding(.horizontal)
+//                         .padding(.top, 8)
+//
+//                         // ✅ FIX: Show connected banner
+//                         if viewModel.connectionState is ConnectionState.Connected {
+//                             if let connectedState = viewModel.connectionState as? ConnectionState.Connected {
+//                                 ConnectedBanner(device: connectedState.device)
+//                                     .padding(.horizontal)
+//                             }
+//                         }
+//
+//                         ScanButton(
+//                             isScanning: viewModel.isScanning,
+//                             isBluetoothEnabled: isBluetoothEnabled,
+//                             onBluetoothAlert: onBluetoothAlert
+//                         ) {
+//                             if isBluetoothEnabled {
+//                                 if viewModel.isScanning {
+//                                     viewModel.stopScan()
+//                                 } else {
+//                                     viewModel.startScan()
+//                                 }
+//                             } else {
+//                                 onBluetoothAlert()
+//                             }
+//                         }
+//                         .padding(.horizontal)
+//
+//                         DeviceStatsCard(deviceCount: viewModel.scannedDevices.count)
+//                             .padding(.horizontal)
+//
+//                         if !isBluetoothEnabled {
+//                             BluetoothDisabledWarning(onClick: onBluetoothAlert)
+//                                 .padding(.horizontal)
+//                         } else if viewModel.scannedDevices.isEmpty {
+//                             EmptyDeviceList(isScanning: viewModel.isScanning)
+//                                 .padding(.top, 32)
+//                         } else {
+//                             LazyVStack(spacing: 12) {
+//                                 ForEach(viewModel.scannedDevices, id: \.id) { device in
+//                                     // ✅ FIX: Pass connection state
+//                                     ModernDeviceCard(
+//                                         device: device,
+//                                         isConnected: viewModel.connectionState is ConnectionState.Connected &&
+//                                             (viewModel.connectionState as? ConnectionState.Connected)?.device.id == device.id,
+//                                         isConnecting: viewModel.connectionState is ConnectionState.Connecting &&
+//                                             (viewModel.connectionState as? ConnectionState.Connecting)?.device.id == device.id
+//                                     ) {
+//                                         viewModel.connect(to: device)
+//                                     }
+//
+//                                 }
+//                             }
+//                             .padding(.horizontal)
+//                         }
+//                     }
+//                     .padding(.vertical)
+//                 }
+//             }
+//             .navigationBarHidden(true)
+//         }
+//     }
+// }
+
+// ✅ NEW: Connected Banner for iOS
+struct ConnectedBanner: View {
+    let device: BleDevice
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 24))
+                .foregroundColor(Color(hex: "10B981"))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Connected")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(Color(hex: "10B981"))
+
+                Text(device.name ?? "Unknown Device")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(Color(hex: "1E293B"))
+            }
+
+            Spacer()
+
+            Image(systemName: "bluetooth.connected")
+                .font(.system(size: 20))
+                .foregroundColor(Color(hex: "10B981"))
+        }
+        .padding(16)
+        .background(Color(hex: "10B981").opacity(0.1))
+        .cornerRadius(16)
+    }
+}
+
 struct BluetoothStatusIcon: View {
     let connectionState: ConnectionState
     let hasDevices: Bool
@@ -203,7 +341,6 @@ struct BluetoothStatusIcon: View {
         .onChange(of: connectionState) { newState in
             isAnimating = newState is ConnectionState.Connecting
         }
-        // ✅ Make clickable when Bluetooth is disabled
         .onTapGesture {
             if !isBluetoothEnabled {
                 onBluetoothClick()
@@ -212,7 +349,6 @@ struct BluetoothStatusIcon: View {
     }
 }
 
-// ✅ UPDATED: Scan Button with Bluetooth State
 struct ScanButton: View {
     let isScanning: Bool
     let isBluetoothEnabled: Bool
@@ -280,7 +416,6 @@ struct ScanButton: View {
     }
 }
 
-// ✅ NEW: Bluetooth Disabled Warning Card
 struct BluetoothDisabledWarning: View {
     let onClick: () -> Void
 
@@ -315,7 +450,6 @@ struct BluetoothDisabledWarning: View {
     }
 }
 
-// MARK: - Device Stats Card
 struct DeviceStatsCard: View {
     let deviceCount: Int
 
@@ -355,7 +489,6 @@ struct DeviceStatsCard: View {
     }
 }
 
-// MARK: - Empty Device List
 struct EmptyDeviceList: View {
     let isScanning: Bool
 
@@ -386,9 +519,11 @@ struct EmptyDeviceList: View {
     }
 }
 
-// MARK: - Modern Device Card
+// ✅ UPDATED: Device Card with connection state
 struct ModernDeviceCard: View {
     let device: BleDevice
+    let isConnected: Bool
+    let isConnecting: Bool
     let onConnect: () -> Void
 
     var signalColor: Color {
@@ -406,6 +541,12 @@ struct ModernDeviceCard: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(
+                        isConnected ?
+                        LinearGradient(
+                            colors: [Color(hex: "10B981"), Color(hex: "059669")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ) :
                         LinearGradient(
                             colors: [Color(hex: "E0E7FF"), Color(hex: "DDD6FE")],
                             startPoint: .topLeading,
@@ -414,9 +555,9 @@ struct ModernDeviceCard: View {
                     )
                     .frame(width: 56, height: 56)
 
-                Image(systemName: "bluetooth")
+                Image(systemName: isConnected ? "bluetooth.connected" : "bluetooth")
                     .font(.system(size: 26))
-                    .foregroundColor(Color(hex: "6366F1"))
+                    .foregroundColor(isConnected ? .white : Color(hex: "6366F1"))
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -445,28 +586,107 @@ struct ModernDeviceCard: View {
 
             Spacer()
 
-            Button(action: onConnect) {
-                HStack(spacing: 6) {
-                    Image(systemName: "link")
-                        .font(.system(size: 14, weight: .medium))
-                    Text("Connect")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color(hex: "6366F1"))
-                .foregroundColor(.white)
-                .cornerRadius(12)
-            }
+            DeviceStatusButton(
+                isConnected: isConnected,
+                isConnecting: isConnecting,
+                onConnect: onConnect
+            )
+
+
+            // ✅ FIX: Show different states
+//             if isConnected {
+//                 HStack(spacing: 6) {
+//                     Image(systemName: "checkmark.circle.fill")
+//                         .font(.system(size: 14, weight: .medium))
+//                         .foregroundColor(Color(hex: "10B981"))
+//                     Text("Connected")
+//                         .font(.system(size: 14, weight: .medium))
+//                         .foregroundColor(Color(hex: "10B981"))
+//                 }
+//                 .padding(.horizontal, 16)
+//                 .padding(.vertical, 10)
+//                 .background(Color(hex: "10B981").opacity(0.15))
+//                 .cornerRadius(12)
+//             } else if isConnecting {
+//                 HStack(spacing: 6) {
+//                     ProgressView()
+//                         .scaleEffect(0.8)
+//                         .tint(Color(hex: "6366F1"))
+//                     Text("Connecting")
+//                         .font(.system(size: 14, weight: .medium))
+//                         .foregroundColor(Color(hex: "6366F1"))
+//                 }
+//                 .padding(.horizontal, 16)
+//                 .padding(.vertical, 10)
+//                 .background(Color(hex: "6366F1").opacity(0.15))
+//                 .cornerRadius(12)
+//             } else {
+//                 Button(action: onConnect) {
+//                     HStack(spacing: 6) {
+//                         Image(systemName: "link")
+//                             .font(.system(size: 14, weight: .medium))
+//                         Text("Connect")
+//                             .font(.system(size: 14, weight: .medium))
+//                     }
+//                     .padding(.horizontal, 16)
+//                     .padding(.vertical, 10)
+//                     .background(Color(hex: "6366F1"))
+//                     .foregroundColor(.white)
+//                     .cornerRadius(12)
+//                 }
+//             }
         }
         .padding(20)
-        .background(Color.white)
+        .background(isConnected ? Color(hex: "10B981").opacity(0.05) : Color.white)
         .cornerRadius(20)
         .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
     }
 }
 
-// MARK: - Device Info View
+struct DeviceStatusButton: View {
+    let isConnected: Bool
+    let isConnecting: Bool
+    let onConnect: () -> Void
+
+    var bgColor: Color {
+        if isConnected { return Color(hex: "10B981") }
+        if isConnecting { return Color(hex: "6366F1").opacity(0.25) }
+        return Color(hex: "6366F1")
+    }
+
+    var fgColor: Color {
+        if isConnecting { return Color(hex: "6366F1") }
+        return .white
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if isConnected {
+                Image(systemName: "checkmark")
+                Text("Connected")
+            } else if isConnecting {
+                ProgressView().scaleEffect(0.7)
+                Text("Connecting")
+            } else {
+                Image(systemName: "link")
+                Text("Connect")
+            }
+        }
+        .font(.system(size: 14, weight: .medium))
+        .foregroundColor(fgColor)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(bgColor)
+        .cornerRadius(12)
+        .onTapGesture {
+            if !isConnected && !isConnecting {
+                onConnect()
+            }
+        }
+    }
+}
+
+
 struct DeviceInfoView: View {
     @ObservedObject var viewModel: BleViewModel
 
@@ -509,7 +729,6 @@ struct DeviceInfoView: View {
     }
 }
 
-// MARK: - Connection Status Card
 struct ConnectionStatusCard: View {
     let connectionState: ConnectionState
 
@@ -595,7 +814,6 @@ struct ConnectionStatusCard: View {
     }
 }
 
-// MARK: - Device Information Card
 struct DeviceInformationCard: View {
     let deviceInfo: DeviceInfo
 
@@ -648,7 +866,6 @@ struct DeviceInformationCard: View {
     }
 }
 
-// MARK: - Modern Info Row
 struct ModernInfoRow: View {
     let icon: String
     let label: String
@@ -676,7 +893,6 @@ struct ModernInfoRow: View {
     }
 }
 
-// MARK: - Battery Level View
 struct BatteryLevelView: View {
     let batteryLevel: BatteryLevel
 
@@ -743,7 +959,6 @@ struct BatteryLevelView: View {
     }
 }
 
-// MARK: - Heart Rate View
 struct HeartRateView: View {
     let heartRate: HeartRate
 
@@ -831,7 +1046,6 @@ struct HeartRateView: View {
     }
 }
 
-// MARK: - Heart Beat Animation
 struct HeartBeatAnimationView: View {
     @State private var isAnimating = false
 
@@ -851,7 +1065,6 @@ struct HeartBeatAnimationView: View {
     }
 }
 
-// MARK: - Disconnect Button
 struct DisconnectButton: View {
     let action: () -> Void
 
@@ -879,7 +1092,6 @@ struct DisconnectButton: View {
     }
 }
 
-// MARK: - BLE ViewModel
 class BleViewModel: ObservableObject {
     private let bleManager: BleManager
 
@@ -935,7 +1147,6 @@ class BleViewModel: ObservableObject {
     }
 }
 
-// MARK: - Color Extension
 extension Color {
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
@@ -963,7 +1174,6 @@ extension Color {
     }
 }
 
-// MARK: - Preview
 #Preview {
     ContentView()
 }

@@ -13,6 +13,7 @@ class BleRepository(private val bleManager: BleManager) {
     val scannedDevices: StateFlow<List<BleDevice>> = bleManager.scannedDevices
     val connectionState: StateFlow<ConnectionState> = bleManager.connectionState
     val deviceInfo: StateFlow<DeviceInfo?> = bleManager.deviceInfo
+    val bluetoothState: StateFlow<com.mobicloudtechnologies.blekmpapp.ble.BluetoothState> = bleManager.bluetoothState
 
     fun startScanning() {
         bleManager.startScan()
@@ -30,11 +31,7 @@ class BleRepository(private val bleManager: BleManager) {
         bleManager.disconnect()
     }
 
-    fun isBluetoothEnabled(): Boolean {
-        return bleManager.isBluetoothEnabled()
-    }
-
-    fun enableBluetooth() {
-        bleManager.requestEnableBluetooth()
+    fun enableAutoReconnect(enabled: Boolean) {
+        bleManager.enableAutoReconnect(enabled)
     }
 }
